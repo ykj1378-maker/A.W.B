@@ -428,6 +428,7 @@ input[type=range]{flex:1;height:6px;accent-color:var(--accent);cursor:pointer;}
       <video id="rlVideo" autoplay playsinline muted webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
       <canvas id="rlCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;touch-action:none;"></canvas>
       <div id="rlRefBadge" style="display:none;position:absolute;top:8px;left:8px;background:rgba(22,163,74,.92);color:#fff;padding:4px 12px;border-radius:14px;font-size:11px;font-weight:700;pointer-events:none;">📐 기준 저장됨</div>
+      <div id="rlZoomDetectBadge" style="display:none;position:absolute;top:36px;left:8px;background:rgba(124,58,237,.9);color:#fff;padding:4px 12px;border-radius:14px;font-size:11px;font-weight:700;pointer-events:none;">📡 줌 자동감지 ON</div>
       <div id="rlZoomBadge" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);color:#fff;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;pointer-events:none;">×1.0</div>
       <div id="rlCamOff" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#1a1a1a;pointer-events:none;">
         <div style="font-size:52px;">📷</div>
@@ -2974,19 +2975,27 @@ const RL={
   zoom:1.0,
   refMmW:0, refMmH:0, refZoom:1.0,
   hasRef:false,
-  calib:1.0,       // 보정계수 (실제/측정)
-  // 라인 위치 — 화면 비율 0~1 (0=눈금자 끝, 1=화면 끝)
-  lineH:0.5,       // 가로 치수 라인 (수직선) 비율
-  lineV:0.5,       // 세로 치수 라인 (수평선) 비율
-  dragging:'',     // 'H'|'V'|''
+  calib:1.0,
+  lineH:0.5,
+  lineV:0.5,
+  dragging:'',
+  // MediaTrack 줌 감지
+  trackZoom:1.0,      // 카메라 트랙 실제 줌 배율
+  trackZoomBase:1.0,  // 기준 저장 시 트랙 줌
+  zoomPollId:null,    // 폴링 타이머
 };
 const RL_KEY='awb_rl_v4';
 const RS=40;       // 눈금자 두께 px
 let _rlRaf=null, _rlPinch=null;
 
 // ── 현재 줌 기준 화면 치수 ──────────────────────────────
-function rlMmW(){ return RL.hasRef?RL.refMmW*(RL.refZoom/RL.zoom)*RL.calib:0; }
-function rlMmH(){ return RL.hasRef?RL.refMmH*(RL.refZoom/RL.zoom)*RL.calib:0; }
+// 버튼줌 × 트랙줌 변화비율 × 보정 → 현재 화면 mm
+function rlEffectiveZoom(){
+  // trackZoom이 바뀌면 trackZoomBase 대비 비율로 추가 보정
+  return RL.zoom * (RL.trackZoomBase / RL.trackZoom);
+}
+function rlMmW(){ return RL.hasRef?RL.refMmW*(rlEffectiveZoom()/RL.refZoom)*RL.calib:0; }
+function rlMmH(){ return RL.hasRef?RL.refMmH*(rlEffectiveZoom()/RL.refZoom)*RL.calib:0; }
 
 // ── 라인 위치 비율 → mm ──────────────────────────────────
 function rlLineMmH(){ return Math.round(RL.lineH*rlMmW()*10)/10; }
@@ -3028,6 +3037,7 @@ async function rlLaunch(){
     }
     rlInitCanvas();
     rlDrawLoop();
+    rlStartZoomPoll();
     window.addEventListener('orientationchange',()=>setTimeout(()=>{
       const cv=document.getElementById('rlCanvas');
       if(cv){const b=cv.parentElement;cv.width=b.offsetWidth;cv.height=b.offsetHeight;}
@@ -3039,19 +3049,55 @@ async function rlLaunch(){
 function rlZoomIn(){RL.zoom=Math.min(8,+(RL.zoom+0.25).toFixed(2));rlUpdateZoomUI();}
 function rlZoomOut(){RL.zoom=Math.max(0.2,+(RL.zoom-0.25).toFixed(2));rlUpdateZoomUI();}
 function rlUpdateZoomUI(){
-  const t='×'+RL.zoom.toFixed(1);
+  const eff = rlEffectiveZoom();
+  const t = '×'+eff.toFixed(2);
+  const tTrack = RL.trackZoom!==1.0 ? ' 📷'+RL.trackZoom.toFixed(1) : '';
   ['rlZoomBadge','rlZoomLabel','rlZoomLabel2'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el) el.textContent=id==='rlZoomBadge'?t:'줌 '+t;
+    if(!el) return;
+    if(id==='rlZoomBadge') el.textContent=t+tTrack;
+    else el.textContent='줌 '+t+tTrack;
   });
 }
 
-// ── 기준 저장 ────────────────────────────────────────────
+// ── MediaTrackSettings.zoom 자동 감지 폴링 ──────────────
+function rlStartZoomPoll(){
+  rlStopZoomPoll();
+  // 초기 트랙 줌 읽기
+  rlReadTrackZoom(true);
+  // 200ms마다 폴링
+  RL.zoomPollId = setInterval(()=>rlReadTrackZoom(false), 200);
+}
+function rlStopZoomPoll(){
+  if(RL.zoomPollId){ clearInterval(RL.zoomPollId); RL.zoomPollId=null; }
+}
+function rlReadTrackZoom(isInit){
+  if(!RL.stream) return;
+  try{
+    const track = RL.stream.getVideoTracks()[0];
+    if(!track) return;
+    const settings = track.getSettings();
+    const z = settings.zoom;
+    if(z===undefined||z===null) return; // 미지원 기기
+    const prev = RL.trackZoom;
+    RL.trackZoom = z;
+    if(isInit){
+      RL.trackZoomBase = z;
+      const badge = document.getElementById('rlZoomDetectBadge');
+      if(badge) badge.style.display='block';
+    }
+    // 줌 변화 시 UI 업데이트
+    if(Math.abs(z-prev)>0.01){
+      rlUpdateZoomUI();
+    }
+  }catch(e){}
+}
 function rlSaveRef(){
   const w=parseFloat(document.getElementById('rlInputW').value);
   const h=parseFloat(document.getElementById('rlInputH').value);
   if(!w||!h||w<=0||h<=0){toast('치수를 입력하세요');return;}
   RL.refMmW=w;RL.refMmH=h;RL.refZoom=RL.zoom;RL.hasRef=true;RL.calib=1.0;
+  RL.trackZoomBase=RL.trackZoom; // 기준 시점 트랙 줌 저장
   try{localStorage.setItem(RL_KEY,JSON.stringify({w,h,z:RL.zoom,c:1.0}));}catch(e){}
   document.getElementById('rlCtrlCalib').style.display='none';
   document.getElementById('rlCtrlMeas').style.display='flex';
@@ -3325,6 +3371,7 @@ function rlDrawLoop(){
 function rlStop(){
   if(RL.stream){RL.stream.getTracks().forEach(t=>t.stop());RL.stream=null;}
   if(_rlRaf){cancelAnimationFrame(_rlRaf);_rlRaf=null;}
+  rlStopZoomPoll();
   const cv=document.getElementById('rlCanvas');
   if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
   document.getElementById('rlCamOff').style.display='flex';
