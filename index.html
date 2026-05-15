@@ -493,7 +493,9 @@ input[type=range]{flex:1;height:6px;accent-color:var(--accent);cursor:pointer;}
           <button onclick="rlZoomIn()" style="flex:1;padding:13px;background:#374151;color:#fff;border:none;border-radius:10px;font-size:18px;cursor:pointer;">＋</button>
         </div>
         <div style="display:flex;gap:8px;">
-          <button onclick="rlResetRef()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔄 기준 재설정</button>
+          <button id="rlAutoBtn" onclick="rlToggleAuto()" style="flex:1;padding:10px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔍 자동감지 ON</button>
+          <button id="rlLockBtn" onclick="rlToggleLock()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔓 잠금해제</button>
+          <button onclick="rlResetRef()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔄 기준재설정</button>
           <button onclick="rlStop()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">⏹ 종료</button>
         </div>
       </div>
@@ -3324,6 +3326,30 @@ function rlDraw(){
     ctx.restore();
   });
 
+  // ── 감지된 사각형 미리보기 (잠금 전) ──
+  if(RLA.detected && !RLA.locked){
+    const d=RLA.detected;
+    ctx.save();
+    ctx.strokeStyle='rgba(251,191,36,.6)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([6,4]);
+    ctx.strokeRect(d.x,d.y,d.w,d.h);
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(251,191,36,.85)';
+    ctx.font='bold 11px Noto Sans KR,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('자동감지 중', d.x+d.w/2, d.y-10);
+    ctx.restore();
+  }
+  if(RLA.locked){
+    ctx.save();
+    ctx.fillStyle='rgba(34,197,94,.85)';
+    ctx.font='bold 12px Noto Sans KR,sans-serif';
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.fillText('🔒 잠금', W-8, 8);
+    ctx.restore();
+  }
+
   // ── 기준값 없을 때 안내 ──
   if(!RL.hasRef){
     ctx.save();
@@ -3342,18 +3368,139 @@ function rlNiceStep(totalMm, maxTicks){
   return nice.find(v=>v>=raw) || nice[nice.length-1];
 }
 
+// ── 자동 감지 상태 ────────────────────────────────────────
+const RLA = {
+  enabled: true,       // 자동감지 ON/OFF
+  locked: false,       // 감지 확정(잠금) 상태
+  detected: null,      // {x,y,w,h} 감지된 사각형
+  snapRaf: null,       // 스냅 애니메이션
+  lastDetect: 0,       // 마지막 감지 시각
+};
+
+// ── 카메라 프레임에서 가장 두드러진 사각형 감지 ──────────
+function rlDetectRect(vid, canvasW, canvasH){
+  const SW=160, SH=120;
+  const tmp=document.createElement('canvas');
+  tmp.width=SW; tmp.height=SH;
+  const tc=tmp.getContext('2d');
+  tc.drawImage(vid,0,0,SW,SH);
+  const d=tc.getImageData(0,0,SW,SH).data;
+
+  // 그레이스케일 + 소벨
+  const gray=new Float32Array(SW*SH);
+  for(let i=0;i<SW*SH;i++) gray[i]=d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114;
+  const mag=new Float32Array(SW*SH);
+  let maxM=0;
+  for(let y=1;y<SH-1;y++) for(let x=1;x<SW-1;x++){
+    const gx=-gray[(y-1)*SW+(x-1)]+gray[(y-1)*SW+(x+1)]-2*gray[y*SW+(x-1)]+2*gray[y*SW+(x+1)]-gray[(y+1)*SW+(x-1)]+gray[(y+1)*SW+(x+1)];
+    const gy=-gray[(y-1)*SW+(x-1)]-2*gray[(y-1)*SW+x]-gray[(y-1)*SW+(x+1)]+gray[(y+1)*SW+(x-1)]+2*gray[(y+1)*SW+x]+gray[(y+1)*SW+(x+1)];
+    mag[y*SW+x]=Math.sqrt(gx*gx+gy*gy);
+    if(mag[y*SW+x]>maxM) maxM=mag[y*SW+x];
+  }
+  const thresh=maxM*0.25;
+
+  // 프로젝션으로 사각형 경계 추정
+  const rowE=new Float32Array(SH), colE=new Float32Array(SW);
+  for(let y=1;y<SH-1;y++) for(let x=1;x<SW-1;x++){
+    if(mag[y*SW+x]>thresh){ rowE[y]+=mag[y*SW+x]; colE[x]+=mag[y*SW+x]; }
+  }
+
+  function peaks2(arr,len,minGap){
+    const loc=[];
+    for(let i=2;i<len-2;i++) if(arr[i]>arr[i-1]&&arr[i]>arr[i+1]&&arr[i]>arr[i-2]&&arr[i]>arr[i+2]) loc.push({i,v:arr[i]});
+    loc.sort((a,b)=>b.v-a.v);
+    const res=[];
+    for(const p of loc){ if(res.every(c=>Math.abs(c.i-p.i)>=minGap)) res.push(p); if(res.length===2) break; }
+    return res.length===2 ? res.map(p=>p.i).sort((a,b)=>a-b) : null;
+  }
+
+  const rp=peaks2(rowE,SH,Math.floor(SH*0.1));
+  const cp=peaks2(colE,SW,Math.floor(SW*0.1));
+  if(!rp||!cp) return null;
+
+  const [t,b]=rp,[l,r]=cp;
+  const bw=r-l, bh=b-t;
+  if(bw<SW*0.05||bh<SH*0.05) return null;
+
+  // 스케일업 → 화면 좌표
+  const sx=canvasW/SW, sy=canvasH/SH;
+  return { x:l*sx, y:t*sy, w:bw*sx, h:bh*sy };
+}
+
+// ── 눈금자를 감지된 사각형으로 부드럽게 스냅 ─────────────
+function rlSnapTo(target){
+  if(!target) return;
+  const dur=300, start=Date.now();
+  const from={x:RL.ruler.x,y:RL.ruler.y,w:RL.ruler.w,h:RL.ruler.h};
+  function step(){
+    const t=Math.min(1,(Date.now()-start)/dur);
+    const ease=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; // easeInOut
+    RL.ruler.x=from.x+(target.x-from.x)*ease;
+    RL.ruler.y=from.y+(target.y-from.y)*ease;
+    RL.ruler.w=from.w+(target.w-from.w)*ease;
+    RL.ruler.h=from.h+(target.h-from.h)*ease;
+    if(t<1) RLA.snapRaf=requestAnimationFrame(step);
+    else { RL.ruler={...target}; RLA.snapRaf=null; }
+  }
+  if(RLA.snapRaf) cancelAnimationFrame(RLA.snapRaf);
+  RLA.snapRaf=requestAnimationFrame(step);
+}
+
 // ── 드로우 루프 ──────────────────────────────────────────
 let _rlRaf=null;
+let _rlDetectTick=0;
 function rlDrawLoop(){
   if(!RL.stream){_rlRaf=null;return;}
+  _rlDetectTick++;
+  // 매 6프레임마다 자동 감지 실행
+  if(RLA.enabled && !RLA.locked && _rlDetectTick%6===0){
+    const vid=document.getElementById('rlVideo');
+    if(vid&&vid.readyState>=2){
+      const cv=document.getElementById('rlCanvas');
+      const det=rlDetectRect(vid, cv.width, cv.height);
+      if(det){
+        RLA.detected=det;
+        RLA.lastDetect=Date.now();
+        if(!RLA.snapRaf) rlSnapTo(det);
+      } else {
+        if(Date.now()-RLA.lastDetect>800) RLA.detected=null;
+      }
+    }
+  }
   rlDraw();
   _rlRaf=requestAnimationFrame(rlDrawLoop);
+}
+
+// ── 자동감지 ON/OFF ──────────────────────────────────────
+function rlToggleAuto(){
+  RLA.enabled=!RLA.enabled;
+  const btn=document.getElementById('rlAutoBtn');
+  if(btn){
+    btn.textContent=RLA.enabled?'🔍 자동감지 ON':'🔍 자동감지 OFF';
+    btn.style.background=RLA.enabled?'#059669':'#6b7280';
+  }
+  if(!RLA.enabled) RLA.detected=null;
+}
+
+// ── 잠금 ON/OFF (잠금 시 자동감지 중단, 수동 드래그만) ──
+function rlToggleLock(){
+  RLA.locked=!RLA.locked;
+  const btn=document.getElementById('rlLockBtn');
+  if(btn){
+    btn.textContent=RLA.locked?'🔒 잠금됨':'🔓 잠금해제';
+    btn.style.background=RLA.locked?'#1a73e8':'#374151';
+    btn.style.color=RLA.locked?'#fff':'#9ca3af';
+  }
+  if(RLA.locked) toast('🔒 위치 잠금 — 수동 드래그로 미세조정 가능');
+  else toast('🔓 자동감지 재개');
 }
 
 // ── 종료 ─────────────────────────────────────────────────
 function rlStop(){
   if(RL.stream){RL.stream.getTracks().forEach(t=>t.stop());RL.stream=null;}
   if(_rlRaf){cancelAnimationFrame(_rlRaf);_rlRaf=null;}
+  if(RLA.snapRaf){cancelAnimationFrame(RLA.snapRaf);RLA.snapRaf=null;}
+  RLA.detected=null; RLA.locked=false; RLA.enabled=true; _rlDetectTick=0;
   const cv=document.getElementById('rlCanvas');
   if(cv){ const ctx=cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height); }
   document.getElementById('rlCamOff').style.display='flex';
