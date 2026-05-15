@@ -248,9 +248,7 @@ input[type=range]{flex:1;height:6px;accent-color:var(--accent);cursor:pointer;}
   <div class="header" style="justify-content:center;">
     <div class="header-logo">A.W.B</div>
   </div>
-  <div class="nav">
-    <button class="nav-tab active" onclick="switchTab('autodetect')">START</button>
-  </div>
+
 
   <!-- ══ 측정 탭 ══ -->
   <div id="tab-measure" class="section">
@@ -360,7 +358,13 @@ input[type=range]{flex:1;height:6px;accent-color:var(--accent);cursor:pointer;}
 
       <!-- ① 대기 상태 (항상 보임, 카메라 OFF) -->
       <div id="stPanelIdle" style="padding:10px 12px;">
-        <div style="font-size:12px;color:#6b7280;text-align:center;">수직선을 물체 시작점에 맞추고 오른쪽 칸 터치</div>
+        <div style="font-size:12px;color:#6b7280;text-align:center;margin-bottom:10px;">수직선을 물체 시작점에 맞추고 오른쪽 칸 터치</div>
+        <div style="display:flex;gap:5px;">
+          <button style="flex:1;padding:11px;background:#f3f4f6;color:#9ca3af;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-weight:700;cursor:default;font-family:'Noto Sans KR',sans-serif;" disabled>🔄 다시</button>
+          <button style="flex:1;padding:11px;background:#d1d5db;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:default;font-family:'Noto Sans KR',sans-serif;" disabled>💾 저장</button>
+          <button style="flex:1;padding:11px;background:#059669;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;" onclick="stViewHistory()">📋 보기</button>
+          <button style="flex:1;padding:11px;background:#f3f4f6;color:#6b7280;border:1.5px solid #d1d5db;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;" onclick="stClose()">닫기</button>
+        </div>
       </div>
 
       <!-- ② 촬영 중 -->
