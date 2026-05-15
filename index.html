@@ -424,85 +424,65 @@ input[type=range]{flex:1;height:6px;accent-color:var(--accent);cursor:pointer;}
 
   <!-- ══ 눈금자 탭 ══ -->
   <div id="tab-ruler" class="section" style="background:#111;padding:0;overflow:hidden;">
-
-    <!-- 카메라 뷰 (전체 채움) -->
     <div style="position:relative;flex:1;min-height:0;overflow:hidden;">
       <video id="rlVideo" autoplay playsinline muted webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;"></video>
-      <canvas id="rlCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;touch-action:none;"></canvas>
-      <!-- 카메라 OFF -->
-      <div id="rlCamOff" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#1a1a1a;">
-        <div style="font-size:56px;">📷</div>
+      <canvas id="rlCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+      <!-- 눈금자 치수 터치 오버레이 (투명, 터치만 처리) -->
+      <canvas id="rlTouchCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;touch-action:none;background:transparent;"></canvas>
+      <!-- 선택된 치수 팝업 -->
+      <div id="rlPopup" style="display:none;position:absolute;background:rgba(26,115,232,.96);color:#fff;border-radius:12px;padding:10px 18px;text-align:center;pointer-events:none;z-index:20;transform:translate(-50%,-110%);">
+        <div style="font-size:10px;opacity:.8;margin-bottom:2px;">선택 치수</div>
+        <div style="font-family:'Space Mono',monospace;font-size:26px;font-weight:700;" id="rlPopupVal">—</div>
+        <div style="font-size:11px;opacity:.7;" id="rlPopupAxis">mm</div>
+      </div>
+      <div id="rlRefBadge" style="display:none;position:absolute;top:8px;left:8px;background:rgba(22,163,74,.92);color:#fff;padding:4px 12px;border-radius:14px;font-size:11px;font-weight:700;pointer-events:none;">📐 기준값 저장됨</div>
+      <div id="rlZoomBadge" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;pointer-events:none;">×1.0</div>
+      <div id="rlCamOff" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#1a1a1a;pointer-events:none;">
+        <div style="font-size:52px;">📷</div>
         <div style="color:#9ca3af;font-size:15px;font-weight:600;">카메라 실행을 눌러주세요</div>
       </div>
-      <!-- 기준값 저장 완료 배지 -->
-      <div id="rlRefBadge" style="display:none;position:absolute;top:10px;left:10px;background:rgba(26,115,232,.92);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;">📐 기준값 저장됨</div>
-      <!-- 줌 표시 -->
-      <div id="rlZoomBadge" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;">×1.0</div>
-      <!-- 측정 결과 오버레이 -->
-      <div id="rlResultOverlay" style="display:none;position:absolute;bottom:10px;left:10px;right:10px;background:rgba(0,0,0,.8);border-radius:12px;padding:12px;display:none;">
-        <div style="display:flex;gap:10px;justify-content:center;">
-          <div style="text-align:center;">
-            <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:#22d3ee;" id="rlResW">—</div>
-            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">가로 mm</div>
-          </div>
-          <div style="color:#6b7280;font-size:24px;align-self:center;">×</div>
-          <div style="text-align:center;">
-            <div style="font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:#a3e635;" id="rlResH">—</div>
-            <div style="font-size:10px;color:#9ca3af;margin-top:2px;">세로 mm</div>
-          </div>
-        </div>
-      </div>
     </div>
-
-    <!-- 하단 컨트롤 -->
     <div style="background:#1f2937;padding:10px;flex-shrink:0;">
-
-      <!-- 상태: 카메라 OFF -->
-      <div id="rlCtrlOff" style="display:flex;gap:8px;">
-        <button onclick="rlLaunch()" style="flex:1;padding:13px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">📷 카메라 실행</button>
+      <div id="rlCtrlOff">
+        <button onclick="rlLaunch()" style="width:100%;padding:13px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">📷 카메라 실행</button>
       </div>
-
-      <!-- 상태: 카메라 ON — 1회차 기준 설정 -->
       <div id="rlCtrlCalib" style="display:none;flex-direction:column;gap:8px;">
-        <div style="color:#9ca3af;font-size:12px;text-align:center;font-weight:600;">눈금자를 물체에 맞추고 실제 치수를 입력하세요</div>
-        <div style="display:flex;gap:8px;">
+        <div style="color:#fbbf24;font-size:11px;text-align:center;font-weight:600;">① 물체를 화면에 맞추고 ② 실제 치수 입력 후 ③ 저장</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
           <div style="flex:1;">
-            <div style="color:#9ca3af;font-size:10px;margin-bottom:4px;text-align:center;">가로 (mm)</div>
-            <input id="rlInputW" type="number" placeholder="가로" style="width:100%;padding:10px;background:#374151;border:1.5px solid #4b5563;border-radius:8px;color:#fff;font-size:16px;text-align:center;font-family:'Space Mono',monospace;">
+            <div style="color:#9ca3af;font-size:10px;margin-bottom:3px;text-align:center;">가로 기준 (mm)</div>
+            <input id="rlInputW" type="number" placeholder="예: 930" inputmode="decimal" style="width:100%;padding:10px;background:#374151;border:1.5px solid #4b5563;border-radius:8px;color:#fff;font-size:16px;text-align:center;font-family:'Space Mono',monospace;">
           </div>
           <div style="flex:1;">
-            <div style="color:#9ca3af;font-size:10px;margin-bottom:4px;text-align:center;">세로 (mm)</div>
-            <input id="rlInputH" type="number" placeholder="세로" style="width:100%;padding:10px;background:#374151;border:1.5px solid #4b5563;border-radius:8px;color:#fff;font-size:16px;text-align:center;font-family:'Space Mono',monospace;">
+            <div style="color:#9ca3af;font-size:10px;margin-bottom:3px;text-align:center;">세로 기준 (mm)</div>
+            <input id="rlInputH" type="number" placeholder="예: 600" inputmode="decimal" style="width:100%;padding:10px;background:#374151;border:1.5px solid #4b5563;border-radius:8px;color:#fff;font-size:16px;text-align:center;font-family:'Space Mono',monospace;">
           </div>
-          <button onclick="rlSaveRef()" style="padding:10px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;align-self:flex-end;margin-bottom:0px;">저장</button>
+          <button onclick="rlSaveRef()" style="padding:11px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">저장</button>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="rlZoomOut()" style="flex:1;padding:10px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;">−</button>
-          <div style="flex:2;background:#374151;border-radius:8px;display:flex;align-items:center;justify-content:center;">
-            <span style="color:#fff;font-size:12px;font-family:'Space Mono',monospace;" id="rlZoomLabel">줌 ×1.0</span>
-          </div>
-          <button onclick="rlZoomIn()" style="flex:1;padding:10px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;">＋</button>
+        <div style="display:flex;gap:6px;">
+          <button onclick="rlZoomOut()" style="flex:1;padding:10px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:20px;cursor:pointer;">−</button>
+          <div style="flex:3;background:#374151;border-radius:8px;display:flex;align-items:center;justify-content:center;"><span id="rlZoomLabel" style="color:#fff;font-size:13px;font-family:'Space Mono',monospace;">줌 ×1.0</span></div>
+          <button onclick="rlZoomIn()" style="flex:1;padding:10px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:20px;cursor:pointer;">＋</button>
         </div>
       </div>
-
-      <!-- 상태: 기준값 저장 후 — 측정 모드 -->
       <div id="rlCtrlMeas" style="display:none;flex-direction:column;gap:8px;">
-        <div style="display:flex;gap:8px;">
-          <button onclick="rlCaptureMeas()" style="flex:2;padding:13px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">📐 치수 측정</button>
-          <button onclick="rlZoomOut()" style="flex:1;padding:13px;background:#374151;color:#fff;border:none;border-radius:10px;font-size:18px;cursor:pointer;">−</button>
-          <button onclick="rlZoomIn()" style="flex:1;padding:13px;background:#374151;color:#fff;border:none;border-radius:10px;font-size:18px;cursor:pointer;">＋</button>
+        <div id="rlMeasResult" style="display:none;background:#0f172a;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">선택된 치수</div>
+          <div style="font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:#22d3ee;" id="rlMeasVal">—</div>
+          <div style="font-size:10px;color:#6b7280;margin-top:2px;" id="rlMeasAxis">mm</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button id="rlAutoBtn" onclick="rlToggleAuto()" style="flex:1;padding:10px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔍 자동감지 ON</button>
-          <button id="rlLockBtn" onclick="rlToggleLock()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔓 잠금해제</button>
-          <button onclick="rlResetRef()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔄 기준재설정</button>
-          <button onclick="rlStop()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">⏹ 종료</button>
+        <div style="display:flex;gap:6px;">
+          <button onclick="rlZoomOut()" style="flex:1;padding:11px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:20px;cursor:pointer;">−</button>
+          <div style="flex:3;background:#374151;border-radius:8px;display:flex;align-items:center;justify-content:center;"><span id="rlZoomLabel2" style="color:#fff;font-size:13px;font-family:'Space Mono',monospace;">줌 ×1.0</span></div>
+          <button onclick="rlZoomIn()" style="flex:1;padding:11px;background:#374151;color:#fff;border:none;border-radius:8px;font-size:20px;cursor:pointer;">＋</button>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="rlResetRef()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">🔄 기준재설정</button>
+          <button onclick="rlStop()" style="flex:1;padding:10px;background:#374151;color:#9ca3af;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">⏹ 종료</button>
         </div>
       </div>
-
     </div>
   </div>
-
   <!-- 눈금자 탭 끝 -->
 
   <div id="stHistoryOverlay" style="display:none;position:fixed;inset:0;background:#f0f2f5;z-index:300;flex-direction:column;">
@@ -2964,61 +2944,48 @@ function stReset(){
   stShowPanel('Idle');
 }
 // ══════════════════════════════════════════════════════════
-// 📏 눈금자 탭 (RL) — 카메라 눈금자 기준 측정
-// 1회차: 눈금자 수동 조정 + 치수 입력 → px/mm 기준 저장
-// 2회차~: 줌 비율에 따라 눈금자 자동 크기 조정
-//          꼭짓점 맞추기 → 치수 자동 출력
+// 📏 눈금자 탭 v2 — 고정 눈금자, 줌 비례 치수 자동 조정
+// 구조:
+//   - 상단 가로 눈금자 (화면 상단에 고정)
+//   - 좌측 세로 눈금자 (화면 좌측에 고정)
+//   - 눈금자 자체는 고정, 줌에 따라 mm 수치만 변함
+//   - 눈금 치수 터치 → 해당 mm 선택
+//   - 기준: 1회차 촬영 시 현재 화면 = refMmW × refMmH mm 로 저장
 // ══════════════════════════════════════════════════════════
 const RL = {
   stream: null,
-  zoom: 1.0,        // 현재 줌 배율
-  refPxW: 0,        // 기준 저장 시 눈금자 가로 px
-  refPxH: 0,        // 기준 저장 시 눈금자 세로 px
-  refMmW: 0,        // 입력한 실제 가로 mm
-  refMmH: 0,        // 입력한 실제 세로 mm
-  refZoom: 1.0,     // 기준 저장 시 줌 배율
-  hasRef: false,    // 기준값 저장 여부
-  // 눈금자 사각형 (4꼭짓점 드래그)
-  ruler: {x:0,y:0,w:0,h:0}, // 화면 px 기준
-  dragCorner: -1,   // 드래그 중인 꼭짓점 인덱스 0~3
-  // 핀치 줌
-  pinch: null,
-  orientation: 0,   // 기기 회전각 (degrees)
+  zoom: 1.0,
+  refMmW: 0,    // 기준 화면 가로 mm (기준 줌 기준)
+  refMmH: 0,    // 기준 화면 세로 mm
+  refZoom: 1.0,
+  hasRef: false,
+  selectedMm: null,
+  selectedAxis: '',
 };
+const RL_KEY = 'awb_rl_ref2';
+let _rlRaf = null;
 
-// localStorage 키
-const RL_KEY = 'awb_rl_ref';
+// ── 현재 줌 기준 화면 치수 계산 ─────────────────────────
+// 줌 커짐 → 화면에 보이는 범위 줄어듦 → mm 수치 줄어듦
+function rlCurrentMmW(){ return RL.hasRef ? RL.refMmW * (RL.refZoom / RL.zoom) : 0; }
+function rlCurrentMmH(){ return RL.hasRef ? RL.refMmH * (RL.refZoom / RL.zoom) : 0; }
 
+// ── 초기화 ──────────────────────────────────────────────
 function rlInitCanvas(){
   const cv = document.getElementById('rlCanvas');
-  if(!cv) return;
+  const tc = document.getElementById('rlTouchCanvas');
+  if(!cv||!tc) return;
   const box = cv.parentElement;
-  cv.width = box.offsetWidth;
-  cv.height = box.offsetHeight;
-  // 기준값 복원
+  cv.width = tc.width = box.offsetWidth;
+  cv.height = tc.height = box.offsetHeight;
   try{
-    const saved = JSON.parse(localStorage.getItem(RL_KEY));
-    if(saved){
-      RL.refPxW=saved.refPxW; RL.refPxH=saved.refPxH;
-      RL.refMmW=saved.refMmW; RL.refMmH=saved.refMmH;
-      RL.refZoom=saved.refZoom; RL.hasRef=true;
-    }
+    const s = JSON.parse(localStorage.getItem(RL_KEY));
+    if(s){ RL.refMmW=s.refMmW; RL.refMmH=s.refMmH; RL.refZoom=s.refZoom; RL.hasRef=true; }
   }catch(e){}
-  rlInitRuler(cv.width, cv.height);
-  rlDraw();
+  rlBindTouch();
 }
 
-// 눈금자 초기 위치 (화면 중앙 40%)
-function rlInitRuler(W, H){
-  RL.ruler = {
-    x: W * 0.15,
-    y: H * 0.25,
-    w: W * 0.70,
-    h: H * 0.50
-  };
-}
-
-// ── 카메라 실행 ──────────────────────────────────────────
+// ── 카메라 실행 ─────────────────────────────────────────
 async function rlLaunch(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -3036,185 +3003,65 @@ async function rlLaunch(){
       document.getElementById('rlCtrlCalib').style.display='flex';
     }
     rlInitCanvas();
-    rlBindEvents();
-    rlOrientationBind();
     rlDrawLoop();
+    window.addEventListener('orientationchange', rlOnRotate);
   }catch(e){ toast('카메라 오류: '+e.message); }
 }
 
-// ── 이벤트 바인딩 ────────────────────────────────────────
-function rlBindEvents(){
-  const cv = document.getElementById('rlCanvas');
-  cv.addEventListener('touchstart', rlTouchStart, {passive:false});
-  cv.addEventListener('touchmove',  rlTouchMove,  {passive:false});
-  cv.addEventListener('touchend',   rlTouchEnd,   {passive:false});
-  cv.addEventListener('mousedown',  rlMouseDown);
-  cv.addEventListener('mousemove',  rlMouseMove);
-  cv.addEventListener('mouseup',    rlMouseUp);
+function rlOnRotate(){
+  setTimeout(()=>{
+    const cv=document.getElementById('rlCanvas');
+    const tc=document.getElementById('rlTouchCanvas');
+    if(!cv||!tc) return;
+    const box=cv.parentElement;
+    cv.width=tc.width=box.offsetWidth;
+    cv.height=tc.height=box.offsetHeight;
+  },300);
 }
 
-// ── 방향 감지 ────────────────────────────────────────────
-function rlOrientationBind(){
-  window.addEventListener('orientationchange', ()=>{
-    setTimeout(()=>{
-      const cv = document.getElementById('rlCanvas');
-      if(!cv) return;
-      const box = cv.parentElement;
-      cv.width = box.offsetWidth; cv.height = box.offsetHeight;
-      rlInitRuler(cv.width, cv.height);
-    }, 300);
-  });
-  if(typeof DeviceOrientationEvent !== 'undefined'){
-    window.addEventListener('deviceorientation', e=>{
-      RL.orientation = e.gamma || 0; // 좌우 기울기
-    });
-  }
-}
-
-// ── 꼭짓점 히트 테스트 ──────────────────────────────────
-function rlCornerPts(){
-  const {x,y,w,h} = RL.ruler;
-  return [{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}];
-}
-function rlHitCorner(px, py){
-  const R = 36;
-  return rlCornerPts().findIndex(c=>Math.hypot(c.x-px,c.y-py)<R);
-}
-function rlEvtPos(e, touch=false){
-  const cv = document.getElementById('rlCanvas');
-  const rect = cv.getBoundingClientRect();
-  const src = touch ? e.changedTouches[0] : e;
-  return {
-    x: (src.clientX - rect.left) * (cv.width / rect.width),
-    y: (src.clientY - rect.top)  * (cv.height / rect.height)
-  };
-}
-
-// ── 터치 이벤트 ──────────────────────────────────────────
-function rlTouchStart(e){
-  e.preventDefault();
-  if(e.touches.length===2){ // 핀치 시작
-    RL.pinch = {
-      dist: Math.hypot(
-        e.touches[0].clientX-e.touches[1].clientX,
-        e.touches[0].clientY-e.touches[1].clientY),
-      zoom: RL.zoom
-    };
-    return;
-  }
-  const p = rlEvtPos(e, true);
-  RL.dragCorner = rlHitCorner(p.x, p.y);
-}
-function rlTouchMove(e){
-  e.preventDefault();
-  if(e.touches.length===2 && RL.pinch){
-    const dist = Math.hypot(
-      e.touches[0].clientX-e.touches[1].clientX,
-      e.touches[0].clientY-e.touches[1].clientY);
-    const ratio = dist / RL.pinch.dist;
-    RL.zoom = Math.max(0.3, Math.min(8.0, RL.pinch.zoom * ratio));
-    rlUpdateZoomUI();
-    rlAdjustRulerByZoom();
-    return;
-  }
-  if(RL.dragCorner < 0) return;
-  const p = rlEvtPos(e, true);
-  rlMoveCorner(RL.dragCorner, p);
-}
-function rlTouchEnd(e){ e.preventDefault(); RL.dragCorner=-1; RL.pinch=null; }
-
-// ── 마우스 이벤트 ────────────────────────────────────────
-function rlMouseDown(e){ RL.dragCorner = rlHitCorner(...Object.values(rlEvtPos(e))); }
-function rlMouseMove(e){ if(RL.dragCorner<0)return; rlMoveCorner(RL.dragCorner, rlEvtPos(e)); }
-function rlMouseUp(){ RL.dragCorner=-1; }
-
-// ── 꼭짓점 이동 (사각형 변형) ────────────────────────────
-function rlMoveCorner(idx, p){
-  const r = RL.ruler;
-  if(idx===0){ r.w+=r.x-p.x; r.h+=r.y-p.y; r.x=p.x; r.y=p.y; }
-  if(idx===1){ r.w=p.x-r.x; r.h+=r.y-p.y; r.y=p.y; }
-  if(idx===2){ r.w=p.x-r.x; r.h=p.y-r.y; }
-  if(idx===3){ r.w+=r.x-p.x; r.h=p.y-r.y; r.x=p.x; }
-  r.w=Math.max(30,r.w); r.h=Math.max(20,r.h);
-}
-
-// ── 줌 버튼 ──────────────────────────────────────────────
-function rlZoomIn(){ RL.zoom=Math.min(8.0,+(RL.zoom+0.25).toFixed(2)); rlUpdateZoomUI(); rlAdjustRulerByZoom(); }
-function rlZoomOut(){ RL.zoom=Math.max(0.3,+(RL.zoom-0.25).toFixed(2)); rlUpdateZoomUI(); rlAdjustRulerByZoom(); }
+// ── 줌 ──────────────────────────────────────────────────
+function rlZoomIn(){ RL.zoom=Math.min(8.0,+(RL.zoom+0.25).toFixed(2)); rlUpdateZoomUI(); }
+function rlZoomOut(){ RL.zoom=Math.max(0.3,+(RL.zoom-0.25).toFixed(2)); rlUpdateZoomUI(); }
 function rlUpdateZoomUI(){
   const t='×'+RL.zoom.toFixed(1);
-  const z1=document.getElementById('rlZoomBadge'); if(z1) z1.textContent=t;
-  const z2=document.getElementById('rlZoomLabel'); if(z2) z2.textContent='줌 '+t;
+  ['rlZoomBadge','rlZoomLabel','rlZoomLabel2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent=id==='rlZoomBadge'?t:'줌 '+t;
+  });
 }
 
-// ── 줌 변경 시 눈금자 자동 크기 조정 ─────────────────────
-// 줌이 커지면 같은 물체가 더 크게 보임 → 눈금자 px도 커져야 함
-// 공식: 새 px = 기준 px × (현재줌 / 기준줌)
-function rlAdjustRulerByZoom(){
-  if(!RL.hasRef) return;
-  const cv = document.getElementById('rlCanvas');
-  const W = cv.width, H = cv.height;
-  const ratio = RL.zoom / RL.refZoom;
-  const newW = RL.refPxW * ratio;
-  const newH = RL.refPxH * ratio;
-  // 중앙 고정으로 크기 변경
-  const cx = RL.ruler.x + RL.ruler.w/2;
-  const cy = RL.ruler.y + RL.ruler.h/2;
-  RL.ruler.w = Math.min(newW, W*0.95);
-  RL.ruler.h = Math.min(newH, H*0.95);
-  RL.ruler.x = Math.max(0, cx - RL.ruler.w/2);
-  RL.ruler.y = Math.max(0, cy - RL.ruler.h/2);
-}
-
-// ── 기준값 저장 ──────────────────────────────────────────
+// ── 기준값 저장 ─────────────────────────────────────────
 function rlSaveRef(){
-  const wv = parseFloat(document.getElementById('rlInputW').value);
-  const hv = parseFloat(document.getElementById('rlInputH').value);
-  if(!wv||!hv||wv<=0||hv<=0){ toast('가로/세로 치수를 입력하세요'); return; }
-  RL.refMmW = wv; RL.refMmH = hv;
-  RL.refPxW = RL.ruler.w; RL.refPxH = RL.ruler.h;
-  RL.refZoom = RL.zoom; RL.hasRef = true;
-  try{ localStorage.setItem(RL_KEY, JSON.stringify({
-    refPxW:RL.refPxW, refPxH:RL.refPxH,
-    refMmW:RL.refMmW, refMmH:RL.refMmH,
-    refZoom:RL.refZoom
-  })); }catch(e){}
+  const w=parseFloat(document.getElementById('rlInputW').value);
+  const h=parseFloat(document.getElementById('rlInputH').value);
+  if(!w||!h||w<=0||h<=0){ toast('가로/세로 치수를 입력하세요'); return; }
+  RL.refMmW=w; RL.refMmH=h; RL.refZoom=RL.zoom; RL.hasRef=true;
+  try{ localStorage.setItem(RL_KEY,JSON.stringify({refMmW:w,refMmH:h,refZoom:RL.zoom})); }catch(e){}
   document.getElementById('rlCtrlCalib').style.display='none';
   document.getElementById('rlCtrlMeas').style.display='flex';
   document.getElementById('rlRefBadge').style.display='block';
-  toast('✅ 기준값 저장됨 ('+wv+'×'+hv+'mm)');
+  toast('✅ 기준값 저장 — 화면='+w+'×'+h+'mm (줌'+RL.zoom+')');
 }
 
-// ── 기준 재설정 ──────────────────────────────────────────
+// ── 기준 재설정 ─────────────────────────────────────────
 function rlResetRef(){
-  RL.hasRef=false; RL.refPxW=0; RL.refPxH=0; RL.refMmW=0; RL.refMmH=0;
+  RL.hasRef=false; RL.refMmW=0; RL.refMmH=0; RL.selectedMm=null;
   localStorage.removeItem(RL_KEY);
   document.getElementById('rlCtrlMeas').style.display='none';
   document.getElementById('rlCtrlCalib').style.display='flex';
   document.getElementById('rlRefBadge').style.display='none';
-  document.getElementById('rlResultOverlay').style.display='none';
+  document.getElementById('rlMeasResult').style.display='none';
+  document.getElementById('rlPopup').style.display='none';
   document.getElementById('rlInputW').value='';
   document.getElementById('rlInputH').value='';
   toast('기준값 초기화됨');
 }
 
-// ── 치수 측정 ────────────────────────────────────────────
-// 현재 줌과 기준 줌의 비율로 px/mm 계산
-function rlCaptureMeas(){
-  if(!RL.hasRef){ toast('기준값을 먼저 저장하세요'); return; }
-  const ratio = RL.zoom / RL.refZoom;
-  const pxPerMmW = RL.refPxW * ratio / RL.refMmW;
-  const pxPerMmH = RL.refPxH * ratio / RL.refMmH;
-  const measW = Math.round(RL.ruler.w / pxPerMmW * 10) / 10;
-  const measH = Math.round(RL.ruler.h / pxPerMmH * 10) / 10;
-  document.getElementById('rlResW').textContent = measW;
-  document.getElementById('rlResH').textContent = measH;
-  const ov = document.getElementById('rlResultOverlay');
-  ov.style.display='block';
-  toast('📐 가로 '+measW+'mm × 세로 '+measH+'mm');
-}
+// ── 눈금자 그리기 ────────────────────────────────────────
+// 상단 가로 1줄 + 좌측 세로 1줄 고정
+// 눈금자 두께: 가로 36px, 세로 36px
+const RL_RULER_SZ = 36; // 눈금자 두께 px
 
-// ── 캔버스 그리기 ────────────────────────────────────────
 function rlDraw(){
   const cv = document.getElementById('rlCanvas');
   if(!cv) return;
@@ -3223,300 +3070,266 @@ function rlDraw(){
   ctx.clearRect(0,0,W,H);
   if(!RL.stream) return;
 
-  const {x,y,w,h} = RL.ruler;
-  const ratio = RL.hasRef ? RL.zoom/RL.refZoom : 1;
-  const pxPerMmW = RL.hasRef ? RL.refPxW*ratio/RL.refMmW : null;
-  const pxPerMmH = RL.hasRef ? RL.refPxH*ratio/RL.refMmH : null;
+  const RS = RL_RULER_SZ;
+  const mmW = rlCurrentMmW();
+  const mmH = rlCurrentMmH();
 
-  // ── 외곽 사각형 ──
+  // ── 눈금자 배경 ──
+  ctx.fillStyle='rgba(15,23,42,.82)';
+  ctx.fillRect(0,0,W,RS);   // 상단 가로
+  ctx.fillRect(0,RS,RS,H-RS); // 좌측 세로
+
+  // ── 가로 눈금 (상단) ──
+  if(RL.hasRef && mmW>0){
+    rlDrawRulerH(ctx, W, RS, mmW);
+  } else {
+    // 기준 없을 때 — px 표시
+    ctx.fillStyle='rgba(251,191,36,.7)';
+    ctx.font='bold 11px Space Mono,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('← 화면 가로 →', W/2, RS/2);
+  }
+
+  // ── 세로 눈금 (좌측) ──
+  if(RL.hasRef && mmH>0){
+    rlDrawRulerV(ctx, H, RS, mmH);
+  } else {
+    ctx.save();
+    ctx.translate(RS/2, H/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillStyle='rgba(251,191,36,.7)';
+    ctx.font='bold 11px Space Mono,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('↑ 화면 세로 ↓', 0, 0);
+    ctx.restore();
+  }
+
+  // ── 교차점 ──
+  ctx.fillStyle='rgba(255,255,255,.15)';
+  ctx.fillRect(0,0,RS,RS);
+  ctx.fillStyle='#fff';
+  ctx.font='bold 9px Space Mono,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('mm', RS/2, RS/2);
+
+  // ── 십자선 (화면 중앙) ──
   ctx.save();
-  ctx.strokeStyle='rgba(34,197,94,.9)';
-  ctx.lineWidth=2.5;
-  ctx.shadowColor='#22c55e'; ctx.shadowBlur=14;
-  ctx.strokeRect(x,y,w,h);
-  ctx.shadowBlur=0; ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.18)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(RS,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W/2,RS); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.setLineDash([]); ctx.restore();
 
-  // ── 가로 눈금 (상단 변) ──
-  if(pxPerMmW){
-    ctx.save();
-    ctx.strokeStyle='rgba(34,197,94,.7)'; ctx.lineWidth=1;
-    ctx.fillStyle='#22c55e';
-    ctx.font='bold 10px Space Mono,monospace';
-    ctx.textAlign='center'; ctx.textBaseline='bottom';
-    const stepMm = rlNiceStep(w/pxPerMmW, 8);
-    for(let mm=0; mm<=w/pxPerMmW; mm+=stepMm){
-      const px = x + mm*pxPerMmW;
-      const tickH = mm%50===0 ? 14 : mm%10===0 ? 10 : 6;
-      ctx.beginPath(); ctx.moveTo(px,y); ctx.lineTo(px,y+tickH); ctx.stroke();
-      if(mm>0 && mm%(stepMm*2)===0){
-        ctx.fillText(mm+'', px, y-2);
-      }
+  // ── 선택된 치수 하이라이트 라인 ──
+  if(RL.selectedMm!==null && RL.hasRef){
+    if(RL.selectedAxis==='H'){
+      const px = RS + (RL.selectedMm/mmW)*(W-RS);
+      ctx.save();
+      ctx.strokeStyle='rgba(34,211,238,.9)'; ctx.lineWidth=1.5;
+      ctx.shadowColor='#22d3ee'; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.moveTo(px,RS); ctx.lineTo(px,H); ctx.stroke();
+      ctx.restore();
+    } else {
+      const py = RS + (RL.selectedMm/mmH)*(H-RS);
+      ctx.save();
+      ctx.strokeStyle='rgba(163,230,53,.9)'; ctx.lineWidth=1.5;
+      ctx.shadowColor='#a3e635'; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.moveTo(RS,py); ctx.lineTo(W,py); ctx.stroke();
+      ctx.restore();
     }
-    // 가로 총 치수
-    ctx.font='bold 13px Space Mono,monospace';
-    ctx.fillStyle='#22d3ee';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(Math.round(w/pxPerMmW*10)/10+' mm', x+w/2, y-14);
-    ctx.restore();
-  } else {
-    // 기준 미저장 시 px 표시
-    ctx.save();
-    ctx.font='bold 13px Space Mono,monospace';
-    ctx.fillStyle='rgba(255,255,255,.8)';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(Math.round(w)+' px', x+w/2, y-14);
-    ctx.restore();
-  }
-
-  // ── 세로 눈금 (좌측 변) ──
-  if(pxPerMmH){
-    ctx.save();
-    ctx.strokeStyle='rgba(163,230,53,.7)'; ctx.lineWidth=1;
-    ctx.fillStyle='#a3e635';
-    ctx.font='bold 10px Space Mono,monospace';
-    ctx.textAlign='right'; ctx.textBaseline='middle';
-    const stepMm = rlNiceStep(h/pxPerMmH, 8);
-    for(let mm=0; mm<=h/pxPerMmH; mm+=stepMm){
-      const py = y + mm*pxPerMmH;
-      const tickW = mm%50===0 ? 14 : mm%10===0 ? 10 : 6;
-      ctx.beginPath(); ctx.moveTo(x,py); ctx.lineTo(x+tickW,py); ctx.stroke();
-      if(mm>0 && mm%(stepMm*2)===0){
-        ctx.fillText(mm+'', x-3, py);
-      }
-    }
-    // 세로 총 치수
-    ctx.save();
-    ctx.translate(x-16, y+h/2);
-    ctx.rotate(-Math.PI/2);
-    ctx.font='bold 13px Space Mono,monospace';
-    ctx.fillStyle='#a3e635';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(Math.round(h/pxPerMmH*10)/10+' mm', 0, 0);
-    ctx.restore();
-    ctx.restore();
-  } else {
-    ctx.save();
-    ctx.save();
-    ctx.translate(x-16, y+h/2);
-    ctx.rotate(-Math.PI/2);
-    ctx.font='bold 13px Space Mono,monospace';
-    ctx.fillStyle='rgba(255,255,255,.8)';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(Math.round(h)+' px', 0, 0);
-    ctx.restore();
-    ctx.restore();
-  }
-
-  // ── 4꼭짓점 핸들 ──
-  const corners = rlCornerPts();
-  const handleCols = ['#fbbf24','#a78bfa','#fbbf24','#a78bfa'];
-  corners.forEach((c,i)=>{
-    ctx.save();
-    const R=12, CL=10, CI=5;
-    ctx.strokeStyle=handleCols[i]; ctx.lineWidth=2.5;
-    ctx.lineCap='round';
-    ctx.shadowColor=handleCols[i]; ctx.shadowBlur=10;
-    [[0,-CI,0,-(R+CL)],[0,CI,0,R+CL],[-CI,0,-(R+CL),0],[CI,0,R+CL,0]].forEach(([x1,y1,x2,y2])=>{
-      ctx.beginPath(); ctx.moveTo(c.x+x1,c.y+y1); ctx.lineTo(c.x+x2,c.y+y2); ctx.stroke();
-    });
-    ctx.shadowBlur=0;
-    ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.moveTo(c.x-3,c.y); ctx.lineTo(c.x+3,c.y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(c.x,c.y-3); ctx.lineTo(c.x,c.y+3); ctx.stroke();
-    ctx.restore();
-  });
-
-  // ── 감지된 사각형 미리보기 (잠금 전) ──
-  if(RLA.detected && !RLA.locked){
-    const d=RLA.detected;
-    ctx.save();
-    ctx.strokeStyle='rgba(251,191,36,.6)';
-    ctx.lineWidth=1.5;
-    ctx.setLineDash([6,4]);
-    ctx.strokeRect(d.x,d.y,d.w,d.h);
-    ctx.setLineDash([]);
-    ctx.fillStyle='rgba(251,191,36,.85)';
-    ctx.font='bold 11px Noto Sans KR,sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('자동감지 중', d.x+d.w/2, d.y-10);
-    ctx.restore();
-  }
-  if(RLA.locked){
-    ctx.save();
-    ctx.fillStyle='rgba(34,197,94,.85)';
-    ctx.font='bold 12px Noto Sans KR,sans-serif';
-    ctx.textAlign='right'; ctx.textBaseline='top';
-    ctx.fillText('🔒 잠금', W-8, 8);
-    ctx.restore();
-  }
-
-  // ── 기준값 없을 때 안내 ──
-  if(!RL.hasRef){
-    ctx.save();
-    ctx.fillStyle='rgba(251,191,36,.9)';
-    ctx.font='bold 13px Noto Sans KR,sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('눈금자를 물체에 맞추고 치수 입력 후 저장', W/2, H*0.88);
-    ctx.restore();
   }
 }
 
-// ── 눈금 간격 계산 (보기 좋은 간격) ─────────────────────
+// ── 가로 눈금 그리기 ──────────────────────────────────────
+function rlDrawRulerH(ctx, W, RS, totalMm){
+  const usableW = W - RS;
+  const step = rlNiceStep(totalMm, Math.floor(usableW/28));
+  ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1;
+  ctx.fillStyle='#e2e8f0';
+  ctx.font='bold 9px Space Mono,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let mm=0; mm<=totalMm; mm+=step){
+    const px = RS + (mm/totalMm)*usableW;
+    const isMaj = mm%(step*5)===0 || step>=50;
+    const tickH = isMaj ? RS*0.7 : RS*0.35;
+    ctx.beginPath(); ctx.moveTo(px, RS); ctx.lineTo(px, RS-tickH); ctx.stroke();
+    if(isMaj && mm>0){
+      ctx.fillText(mm, px, 2);
+    }
+  }
+  // 총 치수 표시
+  ctx.fillStyle='#22d3ee';
+  ctx.font='bold 10px Space Mono,monospace';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText(Math.round(totalMm*10)/10+' mm', W-4, RS/2);
+}
+
+// ── 세로 눈금 그리기 ──────────────────────────────────────
+function rlDrawRulerV(ctx, H, RS, totalMm){
+  const usableH = H - RS;
+  const step = rlNiceStep(totalMm, Math.floor(usableH/28));
+  ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1;
+  ctx.fillStyle='#e2e8f0';
+  ctx.font='bold 9px Space Mono,monospace';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let mm=0; mm<=totalMm; mm+=step){
+    const py = RS + (mm/totalMm)*usableH;
+    const isMaj = mm%(step*5)===0 || step>=50;
+    const tickW = isMaj ? RS*0.7 : RS*0.35;
+    ctx.beginPath(); ctx.moveTo(RS, py); ctx.lineTo(RS-tickW, py); ctx.stroke();
+    if(isMaj && mm>0){
+      ctx.save();
+      ctx.translate(2, py);
+      ctx.rotate(-Math.PI/2);
+      ctx.textAlign='center';
+      ctx.fillText(mm, 0, 0);
+      ctx.restore();
+    }
+  }
+  // 총 치수
+  const totalMmH = totalMm;
+  ctx.save();
+  ctx.translate(RS/2, RS+(H-RS)/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='#a3e635';
+  ctx.font='bold 10px Space Mono,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(Math.round(totalMmH*10)/10+' mm', 0, 0);
+  ctx.restore();
+}
+
+// ── 눈금 간격 계산 ──────────────────────────────────────
 function rlNiceStep(totalMm, maxTicks){
-  const raw = totalMm / maxTicks;
-  const nice = [1,2,5,10,20,25,50,100,200,250,500];
-  return nice.find(v=>v>=raw) || nice[nice.length-1];
+  if(maxTicks<=0) return totalMm;
+  const raw=totalMm/maxTicks;
+  const nice=[0.5,1,2,5,10,20,25,50,100,200,250,500,1000];
+  return nice.find(v=>v>=raw)||nice[nice.length-1];
 }
 
-// ── 자동 감지 상태 ────────────────────────────────────────
-const RLA = {
-  enabled: true,       // 자동감지 ON/OFF
-  locked: false,       // 감지 확정(잠금) 상태
-  detected: null,      // {x,y,w,h} 감지된 사각형
-  snapRaf: null,       // 스냅 애니메이션
-  lastDetect: 0,       // 마지막 감지 시각
-};
-
-// ── 카메라 프레임에서 가장 두드러진 사각형 감지 ──────────
-function rlDetectRect(vid, canvasW, canvasH){
-  const SW=160, SH=120;
-  const tmp=document.createElement('canvas');
-  tmp.width=SW; tmp.height=SH;
-  const tc=tmp.getContext('2d');
-  tc.drawImage(vid,0,0,SW,SH);
-  const d=tc.getImageData(0,0,SW,SH).data;
-
-  // 그레이스케일 + 소벨
-  const gray=new Float32Array(SW*SH);
-  for(let i=0;i<SW*SH;i++) gray[i]=d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114;
-  const mag=new Float32Array(SW*SH);
-  let maxM=0;
-  for(let y=1;y<SH-1;y++) for(let x=1;x<SW-1;x++){
-    const gx=-gray[(y-1)*SW+(x-1)]+gray[(y-1)*SW+(x+1)]-2*gray[y*SW+(x-1)]+2*gray[y*SW+(x+1)]-gray[(y+1)*SW+(x-1)]+gray[(y+1)*SW+(x+1)];
-    const gy=-gray[(y-1)*SW+(x-1)]-2*gray[(y-1)*SW+x]-gray[(y-1)*SW+(x+1)]+gray[(y+1)*SW+(x-1)]+2*gray[(y+1)*SW+x]+gray[(y+1)*SW+(x+1)];
-    mag[y*SW+x]=Math.sqrt(gx*gx+gy*gy);
-    if(mag[y*SW+x]>maxM) maxM=mag[y*SW+x];
-  }
-  const thresh=maxM*0.25;
-
-  // 프로젝션으로 사각형 경계 추정
-  const rowE=new Float32Array(SH), colE=new Float32Array(SW);
-  for(let y=1;y<SH-1;y++) for(let x=1;x<SW-1;x++){
-    if(mag[y*SW+x]>thresh){ rowE[y]+=mag[y*SW+x]; colE[x]+=mag[y*SW+x]; }
-  }
-
-  function peaks2(arr,len,minGap){
-    const loc=[];
-    for(let i=2;i<len-2;i++) if(arr[i]>arr[i-1]&&arr[i]>arr[i+1]&&arr[i]>arr[i-2]&&arr[i]>arr[i+2]) loc.push({i,v:arr[i]});
-    loc.sort((a,b)=>b.v-a.v);
-    const res=[];
-    for(const p of loc){ if(res.every(c=>Math.abs(c.i-p.i)>=minGap)) res.push(p); if(res.length===2) break; }
-    return res.length===2 ? res.map(p=>p.i).sort((a,b)=>a-b) : null;
-  }
-
-  const rp=peaks2(rowE,SH,Math.floor(SH*0.1));
-  const cp=peaks2(colE,SW,Math.floor(SW*0.1));
-  if(!rp||!cp) return null;
-
-  const [t,b]=rp,[l,r]=cp;
-  const bw=r-l, bh=b-t;
-  if(bw<SW*0.05||bh<SH*0.05) return null;
-
-  // 스케일업 → 화면 좌표
-  const sx=canvasW/SW, sy=canvasH/SH;
-  return { x:l*sx, y:t*sy, w:bw*sx, h:bh*sy };
+// ── 터치 이벤트 — 눈금자 치수 선택 ─────────────────────
+function rlBindTouch(){
+  const tc=document.getElementById('rlTouchCanvas');
+  if(!tc) return;
+  tc.addEventListener('touchstart', rlOnTouch, {passive:false});
+  tc.addEventListener('click', rlOnClick);
+  // 핀치 줌
+  tc.addEventListener('touchstart', rlPinchStart, {passive:false});
+  tc.addEventListener('touchmove', rlPinchMove, {passive:false});
+  tc.addEventListener('touchend', rlPinchEnd, {passive:false});
 }
 
-// ── 눈금자를 감지된 사각형으로 부드럽게 스냅 ─────────────
-function rlSnapTo(target){
-  if(!target) return;
-  const dur=300, start=Date.now();
-  const from={x:RL.ruler.x,y:RL.ruler.y,w:RL.ruler.w,h:RL.ruler.h};
-  function step(){
-    const t=Math.min(1,(Date.now()-start)/dur);
-    const ease=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; // easeInOut
-    RL.ruler.x=from.x+(target.x-from.x)*ease;
-    RL.ruler.y=from.y+(target.y-from.y)*ease;
-    RL.ruler.w=from.w+(target.w-from.w)*ease;
-    RL.ruler.h=from.h+(target.h-from.h)*ease;
-    if(t<1) RLA.snapRaf=requestAnimationFrame(step);
-    else { RL.ruler={...target}; RLA.snapRaf=null; }
+let _rlPinch=null;
+function rlPinchStart(e){
+  if(e.touches.length===2){
+    _rlPinch={dist:Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY),zoom:RL.zoom};
   }
-  if(RLA.snapRaf) cancelAnimationFrame(RLA.snapRaf);
-  RLA.snapRaf=requestAnimationFrame(step);
+}
+function rlPinchMove(e){
+  if(e.touches.length===2&&_rlPinch){
+    e.preventDefault();
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    RL.zoom=Math.max(0.3,Math.min(8.0,+(_rlPinch.zoom*(d/_rlPinch.dist)).toFixed(2)));
+    rlUpdateZoomUI();
+  }
+}
+function rlPinchEnd(){ _rlPinch=null; }
+
+function rlGetPos(e, touch){
+  const tc=document.getElementById('rlTouchCanvas');
+  const rect=tc.getBoundingClientRect();
+  const src=touch?e.changedTouches[0]:e;
+  return {
+    x:(src.clientX-rect.left)*(tc.width/rect.width),
+    y:(src.clientY-rect.top)*(tc.height/rect.height)
+  };
 }
 
-// ── 드로우 루프 ──────────────────────────────────────────
-let _rlRaf=null;
-let _rlDetectTick=0;
+function rlOnTouch(e){
+  if(e.touches.length!==1) return;
+  e.preventDefault();
+  rlSelect(rlGetPos(e,true));
+}
+function rlOnClick(e){ rlSelect(rlGetPos(e,false)); }
+
+function rlSelect(p){
+  if(!RL.hasRef) return;
+  const cv=document.getElementById('rlCanvas');
+  const W=cv.width, H=cv.height, RS=RL_RULER_SZ;
+  const mmW=rlCurrentMmW(), mmH=rlCurrentMmH();
+
+  let selMm=null, axis='';
+
+  // 가로 눈금자 영역 (상단 RS px) 터치 — 가로 치수 선택
+  if(p.y<=RS && p.x>RS){
+    selMm=Math.round(((p.x-RS)/(W-RS))*mmW*10)/10;
+    axis='H';
+  }
+  // 세로 눈금자 영역 (좌측 RS px) 터치 — 세로 치수 선택
+  else if(p.x<=RS && p.y>RS){
+    selMm=Math.round(((p.y-RS)/(H-RS))*mmH*10)/10;
+    axis='V';
+  }
+  // 화면 내부 터치 — 가장 가까운 눈금선 선택
+  else if(p.x>RS && p.y>RS){
+    const relX=(p.x-RS)/(W-RS);
+    const relY=(p.y-RS)/(H-RS);
+    // 가로/세로 중 더 가까운 눈금선
+    const nearMmH=Math.round(relX*mmW*10)/10;
+    const nearMmV=Math.round(relY*mmH*10)/10;
+    // 어느 축 눈금이 더 터치에 가까운지 판단 (픽셀 거리)
+    const dH=Math.abs(p.y-RS/2); // 가로 눈금자까지 거리
+    const dV=Math.abs(p.x-RS/2); // 세로 눈금자까지 거리
+    if(dH<dV){ selMm=nearMmH; axis='H'; }
+    else { selMm=nearMmV; axis='V'; }
+  }
+
+  if(selMm===null) return;
+  RL.selectedMm=selMm; RL.selectedAxis=axis;
+
+  // 팝업 표시
+  const popup=document.getElementById('rlPopup');
+  popup.style.display='block';
+  popup.style.left=p.x+'px';
+  popup.style.top=p.y+'px';
+  document.getElementById('rlPopupVal').textContent=selMm;
+  document.getElementById('rlPopupAxis').textContent=axis==='H'?'가로 mm':'세로 mm';
+
+  // 하단 결과 표시
+  document.getElementById('rlMeasResult').style.display='block';
+  document.getElementById('rlMeasVal').textContent=selMm;
+  document.getElementById('rlMeasAxis').textContent=axis==='H'?'가로 mm':'세로 mm';
+
+  // 3초 후 팝업 숨김
+  setTimeout(()=>{ document.getElementById('rlPopup').style.display='none'; },3000);
+}
+
+// ── 드로우 루프 ─────────────────────────────────────────
 function rlDrawLoop(){
   if(!RL.stream){_rlRaf=null;return;}
-  _rlDetectTick++;
-  // 매 6프레임마다 자동 감지 실행
-  if(RLA.enabled && !RLA.locked && _rlDetectTick%6===0){
-    const vid=document.getElementById('rlVideo');
-    if(vid&&vid.readyState>=2){
-      const cv=document.getElementById('rlCanvas');
-      const det=rlDetectRect(vid, cv.width, cv.height);
-      if(det){
-        RLA.detected=det;
-        RLA.lastDetect=Date.now();
-        if(!RLA.snapRaf) rlSnapTo(det);
-      } else {
-        if(Date.now()-RLA.lastDetect>800) RLA.detected=null;
-      }
-    }
-  }
   rlDraw();
   _rlRaf=requestAnimationFrame(rlDrawLoop);
 }
 
-// ── 자동감지 ON/OFF ──────────────────────────────────────
-function rlToggleAuto(){
-  RLA.enabled=!RLA.enabled;
-  const btn=document.getElementById('rlAutoBtn');
-  if(btn){
-    btn.textContent=RLA.enabled?'🔍 자동감지 ON':'🔍 자동감지 OFF';
-    btn.style.background=RLA.enabled?'#059669':'#6b7280';
-  }
-  if(!RLA.enabled) RLA.detected=null;
-}
-
-// ── 잠금 ON/OFF (잠금 시 자동감지 중단, 수동 드래그만) ──
-function rlToggleLock(){
-  RLA.locked=!RLA.locked;
-  const btn=document.getElementById('rlLockBtn');
-  if(btn){
-    btn.textContent=RLA.locked?'🔒 잠금됨':'🔓 잠금해제';
-    btn.style.background=RLA.locked?'#1a73e8':'#374151';
-    btn.style.color=RLA.locked?'#fff':'#9ca3af';
-  }
-  if(RLA.locked) toast('🔒 위치 잠금 — 수동 드래그로 미세조정 가능');
-  else toast('🔓 자동감지 재개');
-}
-
-// ── 종료 ─────────────────────────────────────────────────
+// ── 종료 ────────────────────────────────────────────────
 function rlStop(){
   if(RL.stream){RL.stream.getTracks().forEach(t=>t.stop());RL.stream=null;}
   if(_rlRaf){cancelAnimationFrame(_rlRaf);_rlRaf=null;}
-  if(RLA.snapRaf){cancelAnimationFrame(RLA.snapRaf);RLA.snapRaf=null;}
-  RLA.detected=null; RLA.locked=false; RLA.enabled=true; _rlDetectTick=0;
+  window.removeEventListener('orientationchange',rlOnRotate);
   const cv=document.getElementById('rlCanvas');
-  if(cv){ const ctx=cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height); }
+  if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
   document.getElementById('rlCamOff').style.display='flex';
-  document.getElementById('rlCtrlOff').style.display='flex';
+  document.getElementById('rlCtrlOff').style.display='block';
   document.getElementById('rlCtrlCalib').style.display='none';
   document.getElementById('rlCtrlMeas').style.display='none';
-  document.getElementById('rlResultOverlay').style.display='none';
+  document.getElementById('rlPopup').style.display='none';
+  RL.selectedMm=null;
 }
 
-// ── tab-ruler CSS 보완 ────────────────────────────────────
 (function(){
   const s=document.createElement('style');
-  s.textContent=`
-    #tab-ruler.section.active{padding:0;gap:0;background:#111;}
-    #tab-ruler.section.active>div:first-child{flex:1;min-height:0;}
-  `;
+  s.textContent=`#tab-ruler.section.active{padding:0;gap:0;background:#111;}#tab-ruler.section.active>div:first-child{flex:1;min-height:0;}`;
   document.head.appendChild(s);
 })();
+
 </script></body></html>
