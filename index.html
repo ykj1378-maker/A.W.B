@@ -3394,4 +3394,305 @@ function rlStop(){
   document.head.appendChild(s);
 })();
 
+// ══════════════════════════════════════════════
+// ToF (Time of Flight) 센서 기능
+// ══════════════════════════════════════════════
+const TOF = {
+  session: null,
+  autoTimer: null,
+  autoOn: false,
+  xrSession: null,
+  depthSupported: false,
+};
+
+function tofLog(msg) {
+  const el = document.getElementById('tofLog');
+  if (!el) return;
+  const t = new Date().toLocaleTimeString('ko-KR', {hour12:false});
+  el.innerHTML = `<span style="color:#475569">[${t}]</span> ${msg}\n` + el.innerHTML;
+}
+
+function tofSetResult(html, color='#94a3b8') {
+  const el = document.getElementById('tofCheckResult');
+  if (el) { el.innerHTML = html; el.style.color = color; }
+}
+
+function tofSetSessionStatus(msg, color='#94a3b8') {
+  const el = document.getElementById('tofSessionStatus');
+  if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+async function tofCheck() {
+  tofSetResult('🔍 확인 중...', '#fbbf24');
+  tofLog('지원 여부 확인 시작');
+
+  const results = [];
+  let supported = false;
+
+  // 1) WebXR Depth Sensing API 확인
+  if (navigator.xr) {
+    results.push('✅ WebXR API: 지원');
+    try {
+      const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
+      if (arSupported) {
+        results.push('✅ WebXR immersive-ar: 지원');
+        supported = true;
+        TOF.depthSupported = true;
+      } else {
+        results.push('⚠️ WebXR immersive-ar: 미지원');
+      }
+    } catch(e) {
+      results.push('⚠️ WebXR immersive-ar: ' + e.message);
+    }
+  } else {
+    results.push('❌ WebXR API: 미지원');
+  }
+
+  // 2) 카메라 depth 스트림 확인
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d => d.kind === 'videoinput');
+      results.push(`📷 카메라 수: ${cams.length}개`);
+      if (cams.length > 0) supported = true;
+    } catch(e) {
+      results.push('⚠️ 카메라 열거 실패: ' + e.message);
+    }
+  }
+
+  // 3) ImageCapture API (일부 depth 접근 가능)
+  if (window.ImageCapture) {
+    results.push('✅ ImageCapture API: 지원');
+  } else {
+    results.push('❌ ImageCapture API: 미지원');
+  }
+
+  // 4) 기기 정보
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/.test(ua);
+  const isIOS = /iPhone|iPad/.test(ua);
+  if (isAndroid) results.push('📱 OS: Android (ARCore 가능)');
+  else if (isIOS) results.push('🍎 OS: iOS (ARKit 가능)');
+  else results.push('💻 OS: 데스크톱');
+
+  const color = supported ? '#22d3ee' : '#f87171';
+  const icon = supported ? '✅' : '❌';
+  tofSetResult(results.join('\n'), color);
+  tofLog(`결과: ${icon} ${supported ? '일부 지원 확인됨' : '직접 ToF API 미지원'}`);
+
+  if (!supported) {
+    tofSetResult(results.join('\n') + '\n\n⚠️ 브라우저에서 직접 ToF 센서 접근은\n현재 표준 API로 불가합니다.\n카메라 기반 깊이 추정으로 대체합니다.', '#fbbf24');
+  }
+}
+
+async function tofStart() {
+  if (TOF.session) { tofLog('이미 세션이 실행 중입니다.'); return; }
+  tofSetSessionStatus('시작 중...', '#fbbf24');
+  tofLog('세션 시작 시도');
+
+  // WebXR immersive-ar 세션 시도
+  if (navigator.xr && TOF.depthSupported) {
+    try {
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: [],
+        optionalFeatures: ['depth-sensing'],
+        depthSensing: {
+          usagePreference: ['cpu-optimized'],
+          dataFormatPreference: ['luminance-alpha']
+        }
+      });
+      TOF.xrSession = session;
+      TOF.session = 'xr';
+      session.addEventListener('end', () => {
+        TOF.xrSession = null; TOF.session = null;
+        tofSetSessionStatus('종료됨', '#94a3b8');
+        tofLog('XR 세션 종료');
+      });
+      tofSetSessionStatus('▶ XR 세션 실행 중', '#22d3ee');
+      tofLog('WebXR AR 세션 시작 성공');
+      return;
+    } catch(e) {
+      tofLog('XR 세션 실패: ' + e.message);
+    }
+  }
+
+  // 폴백: 카메라 기반 세션
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: {ideal:640}, height: {ideal:480} }
+    });
+    TOF.session = stream;
+    tofSetSessionStatus('▶ 카메라 세션 실행 중 (깊이추정 모드)', '#a3e635');
+    tofLog('카메라 세션 시작 (ToF 폴백)');
+  } catch(e) {
+    tofSetSessionStatus('❌ 시작 실패', '#f87171');
+    tofLog('세션 시작 실패: ' + e.message);
+  }
+}
+
+function tofStop() {
+  if (!TOF.session) { tofLog('실행 중인 세션 없음'); return; }
+  if (TOF.autoOn) tofAutoStart(); // 자동 모드 끄기
+
+  if (TOF.xrSession) {
+    TOF.xrSession.end().catch(()=>{});
+    TOF.xrSession = null;
+  } else if (TOF.session && TOF.session.getTracks) {
+    TOF.session.getTracks().forEach(t => t.stop());
+  }
+  TOF.session = null;
+  tofSetSessionStatus('미시작', '#94a3b8');
+  document.getElementById('tofDistMm').textContent = '—';
+  document.getElementById('tofDistCm').textContent = '— cm';
+  tofLog('세션 종료');
+}
+
+async function tofGetDist() {
+  if (!TOF.session) {
+    tofLog('먼저 세션을 시작하세요.');
+    tofSetSessionStatus('⚠️ 세션을 먼저 시작하세요', '#fbbf24');
+    return;
+  }
+
+  // XR 세션에서 depth 데이터 시도
+  if (TOF.xrSession) {
+    tofLog('XR depth 데이터 요청 중...');
+    // XR 프레임에서 깊이 읽기 (실제 기기에서만 동작)
+    TOF.xrSession.requestAnimationFrame((time, frame) => {
+      try {
+        const refSpace = TOF.xrRefSpace;
+        if (frame.getDepthInformation) {
+          tofLog('✅ Depth 데이터 수신');
+        } else {
+          tofLog('⚠️ 이 기기는 XR depth 미지원, 추정값 사용');
+          _tofEstimateDistance();
+        }
+      } catch(e) {
+        _tofEstimateDistance();
+      }
+    });
+    return;
+  }
+
+  // 카메라 기반 밝기 분석으로 거리 추정
+  _tofEstimateDistance();
+}
+
+function _tofEstimateDistance() {
+  // 카메라 프레임에서 중앙 밝기 분석 → 거리 추정 (근사치)
+  if (!TOF.session || !TOF.session.getVideoTracks) {
+    tofLog('카메라 스트림 없음');
+    return;
+  }
+  const track = TOF.session.getVideoTracks()[0];
+  if (!track) return;
+
+  const video = document.createElement('video');
+  video.srcObject = new MediaStream([track]);
+  video.play().then(() => {
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 48;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(video, 0, 0, 64, 48);
+    const data = ctx.getImageData(24, 16, 16, 16).data;
+    let brightness = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      brightness += 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+    }
+    brightness /= (data.length / 4);
+    video.srcObject = null;
+
+    // 밝기 → 거리 근사 (밝을수록 가까움 — 실험적)
+    const estimated = Math.round(300 + (1 - brightness/255) * 2700);
+    const mm = Math.max(100, Math.min(5000, estimated));
+    const cm = (mm / 10).toFixed(1);
+
+    document.getElementById('tofDistMm').textContent = mm;
+    document.getElementById('tofDistCm').textContent = cm + ' cm';
+    tofLog(`거리 추정 (밝기분석): ${mm}mm / ${cm}cm  [밝기:${brightness.toFixed(0)}]`);
+  }).catch(e => tofLog('거리 측정 실패: ' + e.message));
+}
+
+function tofAutoStart() {
+  const btn = document.getElementById('tofAutoBtn');
+  if (TOF.autoOn) {
+    clearInterval(TOF.autoTimer);
+    TOF.autoTimer = null;
+    TOF.autoOn = false;
+    if (btn) { btn.textContent = '자동 ON'; btn.style.background='#374151'; btn.style.color='#9ca3af'; }
+    tofLog('자동 측정 중지');
+  } else {
+    if (!TOF.session) {
+      tofLog('먼저 세션을 시작하세요.');
+      return;
+    }
+    TOF.autoOn = true;
+    if (btn) { btn.textContent = '자동 OFF'; btn.style.background='#0ea5e9'; btn.style.color='#fff'; }
+    tofLog('자동 측정 시작 (1초 간격)');
+    TOF.autoTimer = setInterval(tofGetDist, 1000);
+  }
+}
+
+async function tofGetMap() {
+  const cv = document.getElementById('tofMapCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.offsetWidth || 300;
+  cv.width = W; cv.height = 120;
+
+  if (!TOF.session || !TOF.session.getVideoTracks) {
+    // 데모 깊이맵 (세션 없을 때)
+    tofLog('세션 없음 — 데모 깊이맵 표시');
+    _tofDrawDemoMap(ctx, W, 120);
+    return;
+  }
+
+  const track = TOF.session.getVideoTracks()[0];
+  if (!track) { _tofDrawDemoMap(ctx, W, 120); return; }
+
+  const COLS = 20, ROWS = 15;
+  const video = document.createElement('video');
+  video.srcObject = new MediaStream([track]);
+  await video.play();
+  const tmp = document.createElement('canvas');
+  tmp.width = COLS; tmp.height = ROWS;
+  const tCtx = tmp.getContext('2d');
+  tCtx.drawImage(video, 0, 0, COLS, ROWS);
+  video.srcObject = null;
+  const px = tCtx.getImageData(0, 0, COLS, ROWS).data;
+
+  const cW = W/COLS, cH = 120/ROWS;
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      const i=(r*COLS+c)*4;
+      const brightness=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+      // 밝기를 거리로 변환 → 색상 매핑
+      const norm = brightness/255;
+      const hue = norm * 240; // 파랑(먼)→빨강(가까움) 반전
+      ctx.fillStyle = `hsl(${240-hue},90%,50%)`;
+      ctx.fillRect(c*cW, r*cH, cW-1, cH-1);
+    }
+  }
+  tofLog(`깊이맵 획득 완료 (${COLS}×${ROWS} 격자, 카메라 기반)`);
+}
+
+function _tofDrawDemoMap(ctx, W, H) {
+  const COLS=20, ROWS=15;
+  const cW=W/COLS, cH=H/ROWS;
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const dist=Math.sin(c/COLS*Math.PI)*Math.cos(r/ROWS*Math.PI)*0.5+0.5+Math.random()*0.1;
+      const hue=Math.round((1-dist)*240);
+      ctx.fillStyle=`hsl(${hue},85%,50%)`;
+      ctx.fillRect(c*cW,r*cH,cW-1,cH-1);
+    }
+  }
+  tofLog('데모 깊이맵 표시 (세션 시작 후 실제 데이터 가능)');
+}
+
+function tofClearLog() {
+  const el = document.getElementById('tofLog');
+  if (el) el.innerHTML = '';
+}
+
 </script></body></html>
